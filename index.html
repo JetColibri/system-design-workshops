@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System Design Workshops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef0f3;--panel:#fff;--text:#1d2330;--muted:#5d6675;--line:#d9dde4;--blue:#2459c8;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,monospace}
+@media (prefers-color-scheme:dark){:root{--bg:#14171c;--panel:#1c2027;--text:#e6e9ef;--muted:#9aa3b2;--line:#2c323c;--blue:#7aa5ff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 var(--sans)}
+main{max-width:860px;margin:0 auto;padding:48px 16px}
+h1{font-size:30px;margin:0 0 8px}
+.lead{color:var(--muted);margin:0 0 32px;max-width:640px}
+.card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin-bottom:14px;color:inherit;text-decoration:none;transition:border-color .15s}
+.card:hover{border-color:var(--blue)}
+.card .k{font:500 12px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.card h2{margin:4px 0 2px;font-size:21px}
+.card .p{color:var(--blue);font-weight:500;margin:0 0 8px}
+.card p{margin:0}
+.src{margin-top:10px;font-size:14px;color:var(--muted)}
+.src a{color:var(--muted)}
+footer{margin-top:40px;font-size:14px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1>System Design Workshops</h1>
+  <p class="lead">Interactive workshops on system design topics. Each one builds a real product step by step: pick an option, watch the simulation, compare the trade-offs, then debug an incident.</p>
+  <div id="topics"></div>
+  <noscript>Enable JavaScript to see the topics.</noscript>
+  <footer>These materials reflect my own understanding of topics I’ve studied, worked through with an LLM. They are not official material from the original authors.</footer>
+</main>
+<script>
+fetch('topics.json',{cache:'no-store'}).then(r=>r.json()).then(list=>{
+  const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  document.getElementById('topics').innerHTML=list.map(t=>`
+    <a class="card" href="topics/${esc(t.slug)}/">
+      <div class="k">Topic</div>
+      <h2>${esc(t.title)}</h2>
+      <p class="p">${esc(t.product)}</p>
+      <p>${esc(t.description)}</p>
+      ${t.source?`<div class="src">Based on: ${esc(t.source.title)}</div>`:''}
+    </a>`).join('');
+}).catch(()=>{document.getElementById('topics').textContent='Could not load topics.json. Open this site through a web server (see README).';});
+</script>
+</body>
+</html>

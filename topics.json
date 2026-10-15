@@ -1,0 +1,12 @@
+[
+  {
+    "slug": "networking-essentials",
+    "title": "Networking Essentials",
+    "product": "Build a ride-hailing service",
+    "description": "TCP vs UDP, polling vs SSE vs WebSockets, L4/L7/client-side load balancing, balancing algorithms, regionalization, REST vs GraphQL, idempotency, backoff and jitter, circuit breakers, and a retry-storm incident.",
+    "source": {
+      "title": "Hello Interview: Networking Essentials",
+      "url": "https://www.hellointerview.com/learn/system-design/core-concepts/networking-essentials"
+    }
+  }
+]

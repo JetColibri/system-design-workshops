@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build a ride-hailing service</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../shared/incident.css">
+<link rel="stylesheet" href="../../shared/workshop.css">
+</head>
+<body>
+<div id="buildApp" class="b-app">
+  <header class="b-head">
+    <div class="b-brand"><b>Build a ride-hailing service</b><span>Networking Essentials, workshop</span></div>
+    <ol class="b-steps" id="bSteps" aria-label="Steps"></ol>
+    <button class="btn" id="bTheme">Theme</button>
+  </header>
+
+  <div class="b-grid">
+    <div class="b-col">
+
+      <section class="b-step" data-step="1">
+        <p class="b-kicker">Transport layer</p>
+        <h2>Driver on the map</h2>
+        <div class="b-req">
+          <p>The driver app sends a GPS coordinate 4 times per second so the car moves smoothly on the rider’s map.</p>
+          <p>Drivers move around the city on mobile data, and in tunnels and underground parking the connection drops for a few seconds.</p>
+        </div>
+        <p class="b-q">Which transport do we send coordinates over?</p>
+        <div class="b-opts" id="t1Opts">
+          <button class="b-opt" data-v="tcp" aria-pressed="false"><b>TCP</b><span>Guaranteed delivery, strict ordering</span></button>
+          <button class="b-opt" data-v="udp" aria-pressed="false"><b>UDP</b><span>No delivery or ordering guarantees</span></button>
+        </div>
+        <div class="b-sim">
+          <div class="b-empty" id="t1Empty">Pick an option to start the run.</div>
+          <div id="t1Body" hidden>
+            <div class="b-row">
+              <button class="btn" id="t1Tunnel">Drive into a tunnel for 4 s</button>
+            </div>
+            <canvas class="b-map" id="t1Map" aria-label="Map with the car"></canvas>
+            <div class="b-cap"><span><i class="ring"></i>where the car really is</span><span><i class="bdot" style="background:var(--blue)"></i>what the rider sees</span><span><i class="bdot" style="background:var(--muted);opacity:.5"></i>received coordinates</span></div>
+            <div class="b-stats">
+              <div class="b-stat"><span>Current lag</span><b id="t1Now">0 s</b></div>
+              <div class="b-stat"><span>Map recovered after the tunnel</span><b id="t1Rec">not yet</b><small>from exit to a fresh position</small></div>
+              <div class="b-stat"><span>Coordinates lost</span><b id="t1Lost">0</b></div>
+            </div>
+            <button class="btn" id="t1TakeBtn" style="margin-top:14px">Show takeaway</button>
+            <div class="b-take" id="t1Take" hidden>
+              <p>While the network is stable, TCP and UDP behave the same. The difference shows up when packets are lost in bursts.</p>
+              <p>TCP delivers everything, in order. After the tunnel it spends a few more seconds catching up on old coordinates: retransmission waits with doubling pauses (1 s, 2 s, 4 s), and fresh points queue up behind them. This is head-of-line blocking.</p>
+              <p>UDP shows the first fresh point right after the tunnel, and whatever was missed is simply gone. For coordinates that’s fine: nobody needs the car’s old position anymore.</p>
+              <p>Takeaway: pick the transport for the type of data. A stream where only the latest point matters can go without delivery guarantees. Data you can’t lose needs a reliable transport.</p>
+              <div class="b-real">
+                <h4>How it’s done in practice: Uber</h4>
+                <p>Uber measured that ~3.5% of packets on mobile networks are retransmitted, and the p99 TCP retransmission delay reached 28 s. They didn’t switch to “raw” UDP; instead they moved their apps to QUIC: a reliable transport on top of UDP without blocking on someone else’s loss. Tail latency dropped by 10–30%.</p>
+                <a href="https://www.uber.com/blog/employing-quic-protocol/" target="_blank" rel="noopener">Uber Engineering: Employing QUIC Protocol to Optimize Uber's App Performance</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="b-step" data-step="2" hidden>
+        <p class="b-kicker">Application layer</p>
+        <h2>Driver accepted the request</h2>
+        <div class="b-req">
+          <p>The rider requested a ride and is looking at the “Finding a driver” screen. As soon as a driver accepts, the screen must update by itself, then show “driver on the way” and “driver has arrived”.</p>
+          <p>Up to 100,000 riders are waiting for updates at the same time.</p>
+        </div>
+        <p class="b-q">How does the rider’s phone learn about the new status?</p>
+        <div class="b-opts" id="t2Opts">
+          <button class="b-opt" data-v="poll" aria-pressed="false"><b>Polling</b><span>The phone asks every N seconds</span></button>
+          <button class="b-opt" data-v="sse" aria-pressed="false"><b>SSE</b><span>The server pushes over an open connection</span></button>
+          <button class="b-opt" data-v="ws" aria-pressed="false"><b>WebSockets</b><span>An open channel in both directions</span></button>
+        </div>
+        <div class="b-sim">
+          <div class="b-empty" id="t2Empty">Pick an option to start the run.</div>
+          <div id="t2Body" hidden>
+            <div class="b-row" id="t2IntBox">
+              <div class="b-ctl"><span class="b-lbl">Ask every</span>
+                <span class="b-seg" id="t2Int"><button data-v="1">1 s</button><button data-v="3" aria-pressed="true">3 s</button><button data-v="10">10 s</button></span></div>
+            </div>
+            <canvas class="b-flow" id="t2Flow" aria-label="Exchange between the phone and the server"></canvas>
+            <p class="small" style="margin:6px 0 0">Time is sped up: the status changes every few seconds.</p>
+            <div class="b-stats" id="t2Stats"></div>
+            <p class="b-q" style="margin-top:18px">Comparison for 100,000 riders</p>
+            <div class="scroll"><table class="b-cmp" id="t2Cmp"></table></div>
+            <button class="btn" id="t2TakeBtn" style="margin-top:14px">Show takeaway</button>
+            <div class="b-take" id="t2Take" hidden>
+              <p><b>Polling</b> is the simplest and holds no connections, but pays for it in load and traffic: almost every request returns “no change”, and the rider sees the change up to one interval late. Asking more often means even more load.</p>
+              <p><b>SSE</b> sends data only when something changes, so there are no API requests and hundreds of times less traffic. The cost: the server holds 100,000 open connections. But it’s plain HTTP, and the browser reconnects on its own.</p>
+              <p><b>WebSockets</b> give the same result as SSE here but take more work: a separate protocol, load balancer support, your own heartbeat and reconnects. The second direction of the channel isn’t needed for status, so it’s extra complexity.</p>
+              <div class="b-real">
+                <h4>How it’s done in practice: Uber and Shopify</h4>
+                <p><b>Uber.</b> At one point ~80% of requests to their API gateway were polling. They moved to push over SSE and grew to 1.5M concurrent connections.</p>
+                <a href="https://www.uber.com/blog/real-time-push-platform/" target="_blank" rel="noopener">Uber Engineering: Uber's Real-Time Push Platform</a>
+                <p><b>Shopify.</b> Replaced polling (data showed up after 10 s at best) with SSE, and data started arriving in milliseconds.</p>
+                <a href="https://shopify.engineering/server-sent-events-data-streaming" target="_blank" rel="noopener">Shopify Engineering: Using Server Sent Events to Simplify Real-time Streaming at Scale</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="b-step" data-step="3" hidden>
+        <p class="b-kicker">Application layer</p>
+        <h2>Driver app</h2>
+        <div class="b-req">
+          <p>The driver app talks to the server constantly in both directions. The driver sends a position every 4 seconds. The server sends the driver new ride requests that must be accepted within 15 seconds, plus cancellations and route changes.</p>
+          <p>30,000 drivers are online. The server also needs to know which of them are connected right now, so it doesn’t offer a request to someone who closed the app.</p>
+        </div>
+        <p class="b-q">How do we connect the driver app to the server?</p>
+        <div class="b-opts" id="t3Opts">
+          <button class="b-opt" data-v="pollpost" aria-pressed="false"><b>Polling + POST</b><span>Position via requests, poll for ride requests every 5 s</span></button>
+          <button class="b-opt" data-v="ssepost" aria-pressed="false"><b>SSE + POST</b><span>Ride requests over SSE, position as separate requests</span></button>
+          <button class="b-opt" data-v="ws" aria-pressed="false"><b>WebSocket</b><span>Everything in one two-way channel</span></button>
+        </div>
+        <div class="b-sim">
+          <div class="b-empty" id="t3Empty">Pick an option to start the run.</div>
+          <div id="t3Body" hidden>
+            <canvas class="b-flow" id="t3Flow" aria-label="Exchange between the driver app and the server"></canvas>
+            <p class="small" style="margin:6px 0 0">Time is sped up.</p>
+            <div class="b-stats" id="t3Stats"></div>
+            <p class="b-q" style="margin-top:18px">Comparison for 30,000 drivers</p>
+            <div class="scroll"><table class="b-cmp" id="t3Cmp"></table></div>
+            <button class="btn" id="t3TakeBtn" style="margin-top:14px">Show takeaway</button>
+            <div class="b-take" id="t3Take" hidden>
+              <p>This is the textbook case for WebSocket: the exchange is <b>frequent</b>, <b>constant</b> and <b>two-way</b>.</p>
+              <p><b>Polling + POST</b> is the simplest but makes the most requests, and a ride request waits for the next poll, so some offers expire.</p>
+              <p><b>SSE + POST</b> delivers ride requests right away, but every driver position is still a separate HTTP request with headers and auth: thousands of requests per second.</p>
+              <p><b>WebSocket</b> carries both streams over one connection, and thanks to heartbeat the server sees within seconds that a driver is gone. The cost: a separate protocol, load balancer support and your own reconnects.</p>
+              <p>But if the client sends rarely (the ride status in the previous step), WebSocket adds nothing, and SSE is simpler.</p>
+              <div class="b-real">
+                <h4>How it’s done in practice: LinkedIn, Slack and Uber</h4>
+                <p><b>LinkedIn</b> built its messenger on SSE because it passes through any network as plain HTTP.</p>
+                <a href="https://engineering.linkedin.com/blog/2016/10/instant-messaging-at-linkedin--scaling-to-hundreds-of-thousands-" target="_blank" rel="noopener">LinkedIn Engineering: Instant Messaging at LinkedIn</a>
+                <p><b>Slack</b> sends the messages themselves through a regular API, and “typing…” over WebSocket.</p>
+                <a href="https://slack.engineering/real-time-messaging/" target="_blank" rel="noopener">Slack Engineering: Real-time Messaging</a>
+                <p><b>Uber</b> hit the one-way limit of SSE: delivery acks had to be sent separately every 30 s, which was critical for driver offers. So they built the next generation of push on a bidirectional gRPC stream.</p>
+                <a href="https://www.uber.com/blog/ubers-next-gen-push-platform-on-grpc/" target="_blank" rel="noopener">Uber Engineering: Uber's Next Gen Push Platform on gRPC</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="b-step" data-step="4" hidden>
+        <p class="b-kicker">Load balancing</p>
+        <h2>Finding nearby drivers</h2>
+        <div class="b-req">
+          <p>For every ride request, dispatch-service asks location-service which drivers are nearby. The services talk over gRPC: HTTP/2, where many requests fly inside one long-lived TCP connection.</p>
+          <p>dispatch-service has 3 pods, location-service has 4. Each dispatch pod generates load that takes ~80% of one location pod.</p>
+        </div>
+        <p class="b-q">How do we spread requests across location-service pods?</p>
+        <div class="b-opts" id="t5Opts">
+          <button class="b-opt" data-v="l4" aria-pressed="false"><b>L4</b><span>Plain Kubernetes Service</span></button>
+          <button class="b-opt" data-v="l7" aria-pressed="false"><b>L7 proxy</b><span>A proxy that parses HTTP/2, e.g. Envoy</span></button>
+          <button class="b-opt" data-v="client" aria-pressed="false"><b>Client-side</b><span>dispatch knows all pods and picks itself</span></button>
+        </div>
+        <div class="b-sim">
+          <div class="b-empty" id="t5Empty">Pick an option to start the run.</div>
+          <div id="t5Body" hidden>
+            <canvas class="b-lb" id="t5Flow" aria-label="Request distribution across pods"></canvas>
+            <div class="b-stats" id="t5Stats"></div>
+            <p class="b-q" style="margin-top:18px">Comparison</p>
+            <div class="scroll"><table class="b-cmp" id="t5Cmp"></table></div>
+            <button class="btn" id="t5TakeBtn" style="margin-top:14px">Show takeaway</button>
+            <div class="b-take" id="t5Take" hidden>
+              <p><b>L4</b> balances connections, not requests. gRPC holds one long connection, so all traffic from a dispatch pod lands on one location pod. Some are overloaded, some sit idle, and new pods after scaling get nothing until connections are reopened.</p>
+              <p><b>L7 proxy</b> balances each request separately and sees new pods right away. The cost: one more hop and one more component to keep alive.</p>
+              <p><b>Client-side</b> balances each request without an extra hop, and the article directly recommends it for internal microservices: it’s built into gRPC. The cost: the client has to learn about new pods, and that happens with a delay.</p>
+              <p>And the other way around: for WebSocket connections from phones, L4 is a good fit, because one connection is one session.</p>
+              <div class="b-real">
+                <h4>How it’s done in practice: Kubernetes and gRPC</h4>
+                <p>A classic story from the Kubernetes blog: a gRPC app with several pods, but CPU is busy on only one. Same cause: kube-proxy balances connections, and HTTP/2 keeps one connection open for a long time.</p>
+                <a href="https://kubernetes.io/blog/2018/11/07/grpc-load-balancing-on-kubernetes-without-tears/" target="_blank" rel="noopener">Kubernetes Blog: gRPC Load Balancing on Kubernetes without Tears</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="b-step" data-step="5" hidden>
+        <p class="b-kicker">Load balancing algorithms</p>
+        <h2>New gateway pod</h2>
+        <div class="b-req">
+          <p>realtime-gateway holds riders’ open SSE connections: 100,000 connections on 4 pods, 25,000 each. Riders come and go all the time; every minute ~2% of connections close and reopen.</p>
+          <p>Morning peak: the autoscaler added a fifth pod. It’s empty. A pod holds at most 40,000 connections.</p>
+          <p>40% of riders use one mobile carrier that routes thousands of phones through a few shared IP addresses (carrier-grade NAT).</p>
+        </div>
+        <p class="b-q">How does the load balancer pick a pod for a new connection?</p>
+        <div class="b-opts" id="tAOpts">
+          <button class="b-opt" data-v="rr" aria-pressed="false"><b>Round robin</b><span>Each pod in turn</span></button>
+          <button class="b-opt" data-v="lc" aria-pressed="false"><b>Least connections</b><span>To the pod with the fewest connections</span></button>
+          <button class="b-opt" data-v="iph" aria-pressed="false"><b>IP hash</b><span>The client’s IP address decides the pod</span></button>
+        </div>
+        <div class="b-sim">
+          <div class="b-empty" id="tAEmpty">Pick an option to start the run.</div>
+          <div id="tABody" hidden>
+            <p class="small" style="margin:0 0 10px" id="tAClock"></p>
+            <p class="b-scale" id="tAFlow" style="margin:0 0 10px"></p>
+            <div class="b-pods" id="tAPods"></div>
+            <div class="b-stats" id="tAStats"></div>
+            <p class="b-scale" id="tANote"></p>
+            <p class="b-q" style="margin-top:18px">Comparison</p>
+            <div class="scroll"><table class="b-cmp" id="tACmp"></table></div>
+            <button class="btn" id="tATakeBtn" style="margin-top:14px">Show takeaway</button>
+            <div class="b-take" id="tATake" hidden>
+              <p><b>Round robin</b> counts only new connections and ignores how many a pod already holds. For short requests that doesn’t matter, but with long-lived connections the new pod stays underloaded for hours.</p>
+              <p><b>Least connections</b> looks at current load and sends new connections to the least busy pod. For long sessions this is the best choice.</p>
+              <p><b>IP hash</b> pins a client to a pod by IP address, which gives sticky sessions without cookies. But thousands of phones can hide behind one IP address, and when switching from Wi-Fi to mobile data the IP changes and the pinning is lost.</p>
+              <div class="b-real">
+                <h4>What load balancer builders say: HAProxy</h4>
+                <p>The HAProxy docs recommend leastconn exactly where sessions are very long, and say outright that it fits short HTTP requests poorly. And the HAProxy blog warns that many clients can hide behind one IP address, a client can change IP mid-session, and adding or losing a server with IP hash reshuffles all clients to other servers.</p>
+                <a href="https://docs.haproxy.org/2.8/configuration.html#4.2-balance" target="_blank" rel="noopener">HAProxy Configuration Manual: balance</a>
+                <a href="https://www.haproxy.com/blog/client-ip-persistence-or-source-ip-hash-load-balancing" target="_blank" rel="noopener">HAProxy Blog: Client IP persistence or source IP hash load balancing?</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="b-step" data-step="6" hidden>
+        <p class="b-kicker">Regionalization and latency</p>
+        <h2>Launch in Brazil</h2>
+        <div class="b-req">
+          <p>Until now we ran in Europe, and all servers are in Frankfurt. Now we’re launching in São Paulo: that’s ~9,800 km away.</p>
+          <p>Light in fiber travels at ~200,000 km/s, so physics alone gives ~100 ms round trip. Real routes give ~190 ms.</p>
+        </div>
+        <p class="b-q">How do we serve riders in Brazil?</p>
+        <div class="b-opts" id="t6Opts">
+          <button class="b-opt" data-v="one" aria-pressed="false"><b>Everything in Frankfurt</b><span>One region for everyone</span></button>
+          <button class="b-opt" data-v="cdn" aria-pressed="false"><b>Frankfurt + CDN</b><span>Nearby edge servers serve static content</span></button>
+          <button class="b-opt" data-v="region" aria-pressed="false"><b>Region in São Paulo</b><span>Own services and own DB for Brazil</span></button>
+        </div>
+        <div class="b-sim">
+          <div class="b-empty" id="t6Empty">Pick an option to see a São Paulo rider’s latency.</div>
+          <div id="t6Body" hidden>
+            <div class="b-bars" id="t6Bars"></div>
+            <div class="b-cap" id="t6Legend"></div>
+            <button class="btn" id="t6TakeBtn" style="margin-top:14px">Show takeaway</button>
+            <div class="b-take" id="t6Take" hidden>
+              <p>Distance latency can’t be removed by optimizing code, physics sets it. You can only move the data closer to the user.</p>
+              <p><b>CDN</b> speeds up only what can be cached: map tiles, fares, images. The ride request still flies to Frankfurt.</p>
+              <p><b>Regional partitioning</b> works because rides are local by nature: a rider in São Paulo never needs a driver from Berlin. Services and DBs live close to the user. The cost: global tasks, like a report across all countries, get harder and go through async replication between regions.</p>
+              <div class="b-real">
+                <h4>How it’s done in practice: Uber and Slack</h4>
+                <p>The article we read uses Uber as its example of regional partitioning: cities are grouped into regions with their own DB and services nearby. Slack connects the client to the nearest edge region, and when a region fails it moves users to a neighboring one.</p>
+                <a href="https://slack.engineering/real-time-messaging/" target="_blank" rel="noopener">Slack Engineering: Real-time Messaging</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="b-step" data-step="7" hidden>
+        <p class="b-kicker">REST vs GraphQL</p>
+        <h2>Ride screen</h2>
+        <div class="b-req">
+          <p>During the ride the rider sees one screen: status, driver (name, rating), car (model, plate), arrival time and price. The data lives in different services: rides, drivers, cars, ETA.</p>
+          <p id="t8Rtt"></p>
+        </div>
+        <p class="b-q">How does the mobile app get the data for the screen?</p>
+        <div class="b-opts" id="t8Opts">
+          <button class="b-opt" data-v="rest" aria-pressed="false"><b>REST</b><span>A separate resource per entity</span></button>
+          <button class="b-opt" data-v="bff" aria-pressed="false"><b>Screen-specific REST (BFF)</b><span>The backend builds a dedicated endpoint for this screen</span></button>
+          <button class="b-opt" data-v="gql" aria-pressed="false"><b>GraphQL</b><span>The client describes which fields it needs</span></button>
+        </div>
+        <div class="b-sim">
+          <div class="b-empty" id="t8Empty">Pick an option to see how the screen loads.</div>
+          <div id="t8Body" hidden>
+            <div class="b-wf" id="t8Wf"></div>
+            <div class="b-stats" id="t8Stats"></div>
+
+            <p class="b-q" style="margin-top:18px">Comparison</p>
+            <div class="scroll"><table class="b-cmp" id="t8Cmp"></table></div>
+            <button class="btn" id="t8TakeBtn" style="margin-top:14px">Show takeaway</button>
+            <div class="b-take" id="t8Take" hidden>
+              <p><b>REST</b> is simple and caches well by URL, but a screen built from several resources needs several sequential requests. On a distant network each one costs a full RTT. On top of that, each resource returns all its fields, while the screen needs only a few.</p>
+              <p><b>Screen-specific REST</b> (also called BFF, backend for frontend) gives one request, but the backend writes and maintains an endpoint for every screen and every change to it.</p>
+              <p><b>GraphQL</b> gives one request with exactly the needed fields, and the frontend changes the screen without the backend. The cost: CDN caching is harder, and the server gets new problems, like N+1 queries in resolvers and query complexity limits.</p>
+              <p>The article recommends REST by default, and GraphQL when the frontend needs flexibility and per-screen requests become a burden.</p>
+              <div class="b-real">
+                <h4>How it’s done in practice: GitHub</h4>
+                <p>Facebook created GraphQL. In 2016 GitHub announced its public API on it, because REST accounted for over 60% of requests to their DB, and one full representation often took 2–3 calls.</p>
+                <a href="https://github.blog/2016-09-14-the-github-graphql-api/" target="_blank" rel="noopener">GitHub Blog: The GitHub GraphQL API</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="b-step" data-step="8" hidden>
+        <p class="b-kicker">Retries and idempotency</p>
+        <h2>Ride payment</h2>
+        <div class="b-req">
+          <p>When the rider taps “Request ride”, ride-service asks payments to hold the ride cost on the card: <code>POST /payments/hold</code>, 250 UAH. After the ride, this money is charged.</p>
+          <p>The mobile network is unstable. Sometimes payments manages to hold the money, but the response is lost on the way, and ride-service doesn’t know whether it went through.</p>
+        </div>
+        <p class="b-q">What does ride-service do if no response comes back?</p>
+        <div class="b-opts" id="t9Opts">
+          <button class="b-opt" data-v="noretry" aria-pressed="false"><b>Don’t retry</b><span>Show the rider an error</span></button>
+          <button class="b-opt" data-v="retry" aria-pressed="false"><b>Retry the request</b><span>The same POST again</span></button>
+          <button class="b-opt" data-v="idem" aria-pressed="false"><b>Retry with a key</b><span>POST with Idempotency-Key</span></button>
+        </div>
+        <div class="b-sim">
+          <div class="b-empty" id="t9Empty">Pick an option to start the run.</div>
+          <div id="t9Body" hidden>
+            <canvas class="b-flow" id="t9Flow" aria-label="Exchange between ride-service and payments"></canvas>
+            <div class="b-stats" id="t9Stats"></div>
+            <p class="b-q" style="margin-top:18px">Comparison</p>
+            <div class="scroll"><table class="b-cmp" id="t9Cmp"></table></div>
+            <button class="btn" id="t9TakeBtn" style="margin-top:14px">Show takeaway</button>
+            <div class="b-take" id="t9Take" hidden>
+              <p>When the response is lost, the client doesn’t know whether the request ran. It may not have arrived, may have failed midway, or may have succeeded.</p>
+              <p><b>Don’t retry</b> is safe for money, but the rider sees an error even though the funds are already held, and requests again on their own.</p>
+              <p><b>Retry the request</b> is fine for reads (GET) and for operations that give the same result when repeated. For holding money it means a double hold.</p>
+              <p><b>Retry with a key</b>: the client generates a unique key for the operation and sends it with every attempt. The server stores the result of the first execution and returns it on a retry with the same key, doing nothing a second time. Retries become safe.</p>
+              <div class="b-real">
+                <h4>How it’s done in practice: Stripe</h4>
+                <p>Stripe describes the same three cases: the request didn’t arrive, failed midway, or succeeded but the response was lost. For POST requests the client sends an Idempotency-Key header, and on a retry the server returns the stored result of the first attempt. Along with this, Stripe recommends exponential backoff and jitter so retries don’t finish off the server, and that’s exactly what we’ll see in the incident.</p>
+                <a href="https://stripe.com/blog/idempotency" target="_blank" rel="noopener">Stripe Blog: Designing robust and predictable APIs with idempotency</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="b-step" data-step="9" hidden>
+        <p class="b-kicker">Retries: backoff and jitter</p>
+        <h2>Retries after a failure</h2>
+        <div class="b-req">
+          <p>During a deploy, dispatch-service stopped responding for 5 seconds. In that time 3,000 ride requests failed with an error, and ride-service retries them.</p>
+          <p>On top of normal traffic, dispatch can handle 1,000 extra requests per second. If more arrive, it gets overloaded and handles even fewer.</p>
+        </div>
+        <p class="b-q">When does ride-service retry a request?</p>
+        <div class="b-opts" id="tBOpts">
+          <button class="b-opt" data-v="fixed" aria-pressed="false"><b>Every second</b><span>Fixed 1 s pause</span></button>
+          <button class="b-opt" data-v="exp" aria-pressed="false"><b>Exponential backoff</b><span>Pause grows: 1, 2, 4, 8 s, then 8 s each</span></button>
+          <button class="b-opt" data-v="jit" aria-pressed="false"><b>Backoff + jitter</b><span>Random pause from 0 up to 2, 4, 8 s, then up to 8 s</span></button>
+        </div>
+        <div class="b-sim">
+          <div class="b-empty" id="tBEmpty">Pick an option to see how retries arrive.</div>
+          <div id="tBBody" hidden>
+            <canvas class="b-chart" id="tBChart" aria-label="Retry requests to dispatch per second"></canvas>
+            <div class="b-cap"><span><i style="background:var(--blue)"></i>retry requests to dispatch per second</span><span><i style="background:var(--green)"></i>dispatch handles 1 000/s</span></div>
+            <div class="b-stats" id="tBStats"></div>
+            <p class="b-q" style="margin-top:18px">Comparison</p>
+            <div class="scroll"><table class="b-cmp" id="tBCmp"></table></div>
+            <button class="btn" id="tBTakeBtn" style="margin-top:14px">Show takeaway</button>
+            <div class="b-take" id="tBTake" hidden>
+              <p><b>Fixed pause</b> sends all retries at once, in waves. Each wave overloads dispatch, most requests fail again and come back in the next wave.</p>
+              <p><b>Exponential backoff</b> cuts the number of attempts but doesn’t remove the waves: everyone who failed together retries together, just less often. Each wave still overloads dispatch, and the gaps between waves grow, so recovery is the slowest.</p>
+              <p><b>Backoff + jitter</b> adds randomness, and retries spread out over time. For the first ~2 seconds dispatch is still overloaded, but briefly and mildly, and the overload fades fast. Recovery is the fastest, with the fewest wasted requests.</p>
+              <p>Why 9 s and not ~5, if there are 5.3k requests and dispatch handles 1 000/s? An overloaded dispatch handles less than its normal rate, so in the first seconds some requests fail. Those that failed wait a random pause, so in the tail dispatch sits idle part of the time.</p>
+              <div class="b-real">
+                <h4>How it’s done in practice: Amazon</h4>
+                <p>Amazon calls retries “selfish”: a client uses more server resources to raise its own chances. Plain backoff doesn’t help, because everyone who failed together also retries together, so jitter is added on top. Also, retry at only one layer: five layers with three retries each can multiply load on the database by 243.</p>
+                <a href="https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/" target="_blank" rel="noopener">AWS Builders' Library: Timeouts, retries and backoff with jitter</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="b-step" data-step="10" hidden>
+        <p class="b-kicker">Circuit breaker</p>
+        <h2>When dispatch is down</h2>
+        <div class="b-req">
+          <p>dispatch-service is fully down for 30 seconds: from second 10 to second 40. During that time ride-service gets 800 ride requests per second, and each call to dispatch hangs until the 2-second timeout, then fails.</p>
+          <p>After going down, dispatch needs ~5 seconds to warm up. If all traffic hits it at once, warm-up takes longer.</p>
+        </div>
+        <p class="b-q">What does ride-service do when dispatch stops responding en masse?</p>
+        <div class="b-opts" id="tCOpts">
+          <button class="b-opt" data-v="none" aria-pressed="false"><b>Nothing</b><span>Every request goes to dispatch and waits for the timeout</span></button>
+          <button class="b-opt" data-v="cb" aria-pressed="false"><b>Circuit breaker</b><span>After a series of errors, stop calling dispatch</span></button>
+          <button class="b-opt" data-v="cbq" aria-pressed="false"><b>Circuit breaker + fallback</b><span>The request is queued, the rider sees “Finding a driver”</span></button>
+        </div>
+        <div class="b-sim">
+          <div class="b-empty" id="tCEmpty">Pick an option to see ninety seconds with an outage.</div>
+          <div id="tCBody" hidden>
+            <canvas class="b-chart" id="tCChart" style="height:210px" aria-label="Requests to dispatch during the outage"></canvas>
+            <div class="b-cap"><span><i style="background:var(--blue)"></i>requests to dispatch per second</span><span><i style="background:var(--red);opacity:.35;height:10px"></i>dispatch is down</span><span><i style="background:var(--amber);opacity:.3;height:10px"></i>dispatch warming up</span><span id="tCQLeg" hidden><i style="background:var(--amber);height:10px"></i>requests from the queue</span><span id="tCLeg">top strip, breaker state: <b class="s-ok">CLOSED</b>, <b class="s-bad">OPEN</b>, <b class="s-warn">HALF-OPEN</b></span></div>
+            <div class="b-stats" id="tCStats"></div>
+            <p class="b-scale" id="tCNote"></p>
+            <p class="b-q" style="margin-top:18px">Comparison</p>
+            <div class="scroll"><table class="b-cmp" id="tCCmp"></table></div>
+            <button class="btn" id="tCTakeBtn" style="margin-top:14px">Show takeaway</button>
+            <div class="b-take" id="tCTake" hidden>
+              <p><b>Without a breaker</b> ride-service keeps hammering a dead dispatch: every rider waits 2 seconds just to get an error, and hanging requests eat ride-service memory and threads. When dispatch comes back, all traffic hits it at once, and warm-up takes longer.</p>
+              <p><b>Circuit breaker</b> “opens” (OPEN) after a series of errors and fails fast without calling dispatch. Every few seconds it lets probe requests through (HALF-OPEN), and when a probe succeeds it “closes” again (CLOSED) and lets all traffic through at once. While dispatch is warming up, only probe requests reach it, with no flood of retries or hanging requests. Full traffic returns once it’s ready. If you need a gradual return, you add it separately (ramp-up).</p>
+              <p><b>Fallback</b> decides what the rider sees while the breaker is open. Instead of an error, the request is queued and the rider sees “Finding a driver”. When dispatch comes back, the queue drains on top of normal traffic, which creates a load spike. So the queue is capped in size and drain rate, and stale requests (the rider already left) are dropped.</p>
+              <div class="b-real">
+                <h4>How it’s done in practice: Martin Fowler and Amazon</h4>
+                <p>Fowler describes exactly this problem: a remote call hangs until the timeout, and when there are many such calls the client runs out of resources and the failure cascades further. As a fallback he suggests, for example, queuing the request for later or showing stale but acceptable data, and logging and alerting on every breaker trip.</p>
+                <a href="https://martinfowler.com/bliki/CircuitBreaker.html" target="_blank" rel="noopener">Martin Fowler: CircuitBreaker</a>
+                <p>Amazon instead limits retries locally with a token bucket and writes that a circuit breaker adds modal behavior that makes testing harder and can slow down recovery. So it’s a tool with trade-offs, not a mandatory layer.</p>
+                <a href="https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/" target="_blank" rel="noopener">AWS Builders' Library: Timeouts, retries and backoff with jitter</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="b-nav">
+        <button class="btn" id="bPrev">Back</button>
+        <button class="btn primary" id="bNext">Next</button>
+      </div>
+    </div>
+
+    <div class="b-side">
+      <div class="b-archcard">
+        <h3>Service architecture</h3>
+        <p class="b-archhint">Click a service to read what it does.</p>
+        <svg id="bArch" viewBox="0 -10 630 575" aria-label="Ride-hailing services diagram"></svg>
+        <div class="b-info" id="bInfo" hidden></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div id="incidentApp" hidden>
+
+
+<header class="top">
+  <span class="crumb">context <b>prod-eu-west</b> / namespace <b>rides</b></span>
+  <span class="clock" id="clock">14:12:00</span>
+  <div class="ctrls">
+    <button class="btn" id="btnArch">Architecture</button>
+    <button class="btn" id="btnPause">Pause</button>
+    <button class="btn" id="btnSpeed">Speed 1×</button>
+    <button class="btn" id="btnTheme" aria-label="Toggle theme">Theme</button>
+    <button class="btn danger" id="btnReset">Start over</button>
+  </div>
+</header>
+
+<div class="alert" id="alert" role="status">
+  <span class="dot"></span>
+  <span class="state" id="alState">FIRING</span>
+  <div>
+    <div class="name">RideServiceHighErrorRate</div>
+    <div class="desc" id="alDesc">ride-service 5xx rate above 5% for 10m. Riders cannot request rides.</div>
+  </div>
+  <span class="val" id="alVal">0%</span>
+</div>
+
+<div class="shell">
+  <nav aria-label="Resources">
+    <h3>Workloads</h3>
+    <button data-v="pods">Pods <span class="badge" id="bPods">0</span></button>
+    <button data-v="db">dispatch-db</button>
+    <h3>Observability</h3>
+    <button data-v="metrics">Metrics</button>
+    <button data-v="logs">Logs</button>
+    <button data-v="events">Events <span class="badge" id="bEv">0</span></button>
+    <h3>Configuration</h3>
+    <button data-v="config">ride-service-config</button>
+  </nav>
+  <main id="main"></main>
+  <aside>
+    <h3>Incident timeline</h3>
+    <ul class="tl" id="tl"></ul>
+    <div>
+      <button class="btn" id="btnHint">Hint</button>
+      <div class="hint" id="hint" hidden style="margin-top:8px"></div>
+    </div>
+    <div class="card" style="margin:0">
+      <h4>Now</h4>
+      <div class="kv" id="now"></div>
+    </div>
+  </aside>
+</div>
+
+<div class="ov" id="brief">
+  <div class="modal" role="dialog" aria-labelledby="bt">
+    <h2 id="bt">Six months later</h2>
+    <div class="pager">PagerDuty: [FIRING] RideServiceHighErrorRate, prod-eu-west/rides, since 14:02</div>
+    <p>Tuesday, 14:12. Riders haven’t been able to request a ride for ten minutes. Support is flooded with tickets, drivers are idle with no requests.</p>
+    <p>In front of you is the cluster console: pods, metrics, logs, events, service config and the database. Find the cause and stop the incident.</p>
+    <div class="foot"><button class="btn primary" id="btnStart">Take the incident</button></div>
+  </div>
+</div>
+
+<div class="ov" id="report" hidden>
+  <div class="modal" role="dialog" aria-labelledby="rt">
+    <h2 id="rt">Incident closed</h2>
+    <p id="rSum"></p>
+    <ul id="rList"></ul>
+    <div class="foot">
+      <button class="btn primary" id="btnClose">Keep watching</button>
+      <button class="btn" id="btnAgain">Start over</button>
+    </div>
+  </div>
+</div>
+
+
+</div>
+<script src="../../shared/engine.js"></script>
+<script src="incident.js"></script>
+<script src="workshop.js"></script>
+<script src="../../shared/content.js"></script>
+</body>
+</html>
